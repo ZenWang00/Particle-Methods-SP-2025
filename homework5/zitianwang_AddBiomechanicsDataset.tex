@@ -1,0 +1,50 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{siunitx}
+\title{Implementation Plan for "AddBiomechanics Dataset: Capturing the Physics of Human Motion at Scale"}
+\author{Zitian Wang}
+\date{\today}
+\begin{document}
+\maketitle
+
+\section*{1. Background and Methods}
+The paper introduces the AddBiomechanics dataset, a large-scale repository of synchronized motion-capture, force-plate, and medical imaging data from hundreds of human subjects performing various activities of daily living (walking, running, jumping).  The dataset includes:
+\begin{itemize}
+  \item 3D marker trajectories (200+ markers, 120~Hz)
+  \item Ground reaction forces (3D, 1000~Hz)
+  \item Synchronized MRI scans of musculoskeletal anatomy
+\end{itemize}
+The authors demonstrate how inverse dynamics driven by motion data can estimate joint torques and muscle activations, and they validate these estimates against EMG measurements.
+
+\section*{2. Implementation Plan}
+\subsection*{2.1 Reproducible Results}
+We will reproduce the published walking trial on a treadmill at 1.25~m/s: joint angle trajectories and computed knee joint torque profiles.  Targets: match peak knee extension torque (\SI{1.2}{Nm/kg}) within 10\% and reproduce waveform shape (correlation $>0.95$).
+
+\subsection*{2.2 Data \& Parameter Settings}
+\begin{itemize}
+  \item Subjects: select 10 healthy adults (balanced gender, age 20--40).
+  \item Trials: treadmill walking at 1.25~m/s, 60~s duration.
+  \item Marker data: low-pass filter at 6~Hz (Butterworth, 4th order).
+  \item Force data: low-pass filter at 20~Hz.
+  \item Inverse dynamics:
+    \begin{itemize}
+      \item Segment inertial parameters from anthropometric tables (Dempster).
+      \item Joint centers estimated from marker clusters.
+    \end{itemize}
+  \item EMG comparison: normalize EMG amplitude to %MVC.
+\end{itemize}
+
+\subsection*{2.3 Model Extensions and New Problems}
+\begin{itemize}
+  \item \textbf{Particle-based muscle modeling}: integrate SPH muscle fibers into kinematic chain to predict stress distributions.
+  \item \textbf{Real-time feedback}: implement a particle-fluid hybrid to simulate blood flow and heat dissipation under dynamic loading.
+  \item \textbf{Pathological analysis}: compare joint kinetics for subjects with gait impairments, to identify biomarkers of early osteoarthritis.
+  \item \textbf{Data augmentation}: use generative particle models to synthesize new motion patterns for machine-learning applications.
+\end{itemize}
+
+\vfill
+\noindent\textit{This plan leverages the multimodal AddBiomechanics dataset to validate and extend particle-based musculoskeletal simulations at scale.}
+\end{document} 

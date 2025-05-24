@@ -1,0 +1,249 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts} % Added amsfonts for \mathbb
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{float}
+\usepackage{booktabs} % For professional quality tables
+\geometry{margin=1in}
+
+\title{A Study of a Leader-Follower Particle System with Capacity Constraints and Hybrid Leader Behavior}
+\author{Zitian Wang}
+\date{May 2025 (Proposal Stage)}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+% To be filled in after simulations and analysis.
+This report will present the design, implementation, and analysis of a novel leader-follower particle system. 
+We investigate how a small fraction of capacity-limited leaders, coordinating their direction periodically 
+while otherwise exhibiting local Vicsek-like alignment among themselves, can influence a larger population of followers. 
+Followers exhibit differentiated behavior: those assigned to a leader directly adopt its heading, while unassigned 
+followers adhere to standard Vicsek model rules with all neighbors. We plan to explore the system's collective 
+behavior across various scales, leader coverage ratios, leader configurations, and initial distributions, 
+focusing on metrics like polarization, assignment stability, leader load balance, and leader spacing stability.
+\end{abstract}
+
+\section{Introduction}
+The Vicsek model is a cornerstone in the study of collective motion, demonstrating how simple local alignment rules 
+can lead to global order in systems of self-propelled particles. However, many real-world systems, from animal herds 
+to robotic swarms or even opinion dynamics, feature hierarchical structures or influential agents (leaders) 
+that guide a subset of the population (followers). This project introduces a Leader-Follower (LF) model 
+that incorporates such features, specifically focusing on leaders with limited influence capacity and a hybrid 
+behavioral strategy involving both local Vicsek interactions among leaders and periodic global direction synchronization.
+
+\section{The Leader-Follower (LF) Model Design}
+Our model extends the 2D Vicsek model by introducing two distinct particle types and a more complex set of interaction rules.
+
+\subsection{Particle Types}
+\begin{itemize}
+    \item \textbf{Leaders ($N_L$ particles):} These particles have the ability to directly influence a limited number of followers. They also interact among themselves and periodically synchronize their overall direction.
+    \item \textbf{Followers ($N_F$ particles):} These particles are influenced by leaders (if assigned) or by their local neighborhood following Vicsek rules.
+\end{itemize}
+
+\subsection{Follower Behavior}
+At each simulation step $t$, follower behavior is determined as follows:
+\begin{enumerate}
+    \item \textbf{Leader Assignment:} Each follower $f$ identifies the set of leaders $L_{near}$ within a certain visual range (or all leaders). From $L_{near}$, it selects the leader $L^*$ that is closest and currently has available capacity (i.e., number of currently assigned followers $<$ \texttt{leader\_capacity}). If multiple such leaders exist, the closest one is chosen. If no leader can accept the follower, it remains unassigned for this step.
+    \item \textbf{Direction Update (for step $t+dt$):}
+    \begin{itemize}
+        \item \textbf{Directly Assigned Followers:} If follower $f$ was assigned to leader $L^*$ at step $t$, its heading $\theta_f(t+dt)$ becomes the heading of $L^*$ at step $t$, $\theta_{L^*}(t)$, plus a small random noise $\Delta_f(t) \sim \mathrm{Unif}[-\eta/2, \eta/2]$.
+        \begin{equation}
+            \theta_f(t+dt) = \theta_{L^*}(t) + \Delta_f(t)
+        \end{equation}
+        \item \textbf{Unassigned/Free Followers:} If follower $f$ was not assigned to any leader at step $t$, its heading is updated according to the standard Vicsek model rule, by aligning with the average heading of all particles (leaders and other followers) within its interaction radius $R_{\text{interaction}}$, plus noise:
+        \begin{equation}
+            \theta_f(t+dt) = \mathrm{Arg}\!\left\{\sum_{j \in \mathcal{N}_f(t)} e^{i\theta_j(t)}\right\} + \Delta_f(t)
+        \end{equation}
+        where $\mathcal{N}_f(t)$ is the set of all particles (leaders or followers) within distance $R_{\text{interaction}}$ of follower $f$ at time $t$.
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Leader Behavior}
+Leaders aim to coordinate their movement while also influencing followers.
+\begin{enumerate}
+    \item \textbf{Non-Communication Steps:} In steps where no global communication occurs, leaders update their headings based on Vicsek-like interactions with *all other particles (leaders and followers)* within their interaction radius $R_{\text{interaction}}$:
+    \begin{equation}
+        \theta_L(t+dt) = \mathrm{Arg}\!\left\{\sum_{j \in \mathcal{N}_L^{all}(t)} e^{i\theta_j(t)}\right\} + \Delta_L(t)
+    \end{equation}
+    where $\mathcal{N}_L^{all}(t)$ is the set of all particles (any type) within distance $R_{\text{interaction}}$ of leader $L$ at time $t$ (excluding $L$ itself).
+    \item \textbf{Communication Steps (Periodic Synchronization):} Every $T_{\text{communication}}$ steps, all leaders instantaneously synchronize their direction. The new heading for all leaders becomes the current average heading of all leaders, plus noise:
+    \begin{equation}
+        \bar{\theta}_{leaders}(t) = \mathrm{Arg}\!\left\{\sum_{k=1}^{N_L} e^{i\theta_{L_k}(t)}\right\}
+    \end{equation}
+    \begin{equation}
+        \theta_{L_j}(t+dt) = \bar{\theta}_{leaders}(t) + \Delta_{L_j}(t) \quad \forall j=1, \dots, N_L
+    \end{equation}
+\end{enumerate}
+
+\subsection{Position Update}
+All particles (leaders and followers) update their positions $\mathbf{x}_i \in \mathbb{R}^2$ using their new heading $\theta_i(t+dt)$ and a constant speed $v_0$:
+\begin{equation}
+    \mathbf{x}_i(t+dt) = \mathbf{x}_i(t) + v_0 \begin{pmatrix} \cos\theta_i(t+dt) \\ \sin\theta_i(t+dt) \end{pmatrix} \Delta t
+\end{equation}
+Periodic boundary conditions are applied to keep particles within the domain $[0, L_{\text{domain}}] \times [0, L_{\text{domain}}]$.
+
+\subsection{Key Parameters}
+Key simulation parameters are summarized in Table~\ref{tab:parameters}.
+
+\begin{table}[H]
+    \centering
+    \caption{Key Configuration Parameters for `run_presentation_demo.py`}
+    \label{tab:demo_params}
+    \begin{tabular}{lll}
+        \toprule 
+        Parameter & Pure Vicsek Run & Leader-Follower Run \\ 
+        \midrule
+        Total Particles ($N_{total}$) & 1000 & 1000 \\ 
+        \quad - Followers ($N_F$) & 1000 (all are type follower) & 990 \\ 
+        \quad - Leaders ($N_L$) & 0 & 10 \\ 
+        Leader Capacity (per leader) & N/A & 10 \\ 
+        Total Leader Capacity & N/A & 100 (covers 10.1\% of $N_F$) \\\\ 
+        Leader Communication Interval ($T_{\text{communication}}$) & N/A & 10 steps \\ 
+        Max Simulation Steps & 300 & 300 \\ 
+        \addlinespace % Adds a little extra space before the next group
+        \textit{Convergence Criteria Parameters} & & \\ 
+        Polarization Threshold (for stopping) & 0.95 & 0.95 \\ 
+        Convergence Window (checks) & 40 & 40 \\ 
+        Check Interval (steps) & 5 & 5 \\ 
+        \addlinespace
+        \textit{Physical Parameters (Defaults Used)} & & \\ 
+        Domain Size ($L_{\text{domain}}$) & 20.0 & 20.0 \\ 
+        Particle Speed ($v_0$) & 0.5 & 0.5 \\ 
+        Interaction Radius ($R_{\text{interaction}}$) & 2.0 & 2.0 \\ 
+        Noise Amplitude ($\eta$) & 0.2 & 0.2 \\ 
+        Time Step ($\Delta t$) & 0.5 & 0.5 \\ 
+        Leader Initial Distribution & N/A & Random \\ 
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: N/A indicates the parameter is not applicable to that model type. The Leader-Follower run uses the default leader distribution mode (random). Total leader capacity coverage is calculated as $(N_L \times \text{Leader Capacity}) / N_F$.}}
+\end{table}
+
+\section{Proposed Experiments and Evaluation Metrics}
+To understand the behavior of the LF model, we propose a series of computational experiments compared against a baseline pure Vicsek model (same total number of particles, no leaders).
+
+\subsection{Experiment 1: Impact of System Scale ($N_{total}$)}
+\begin{itemize}
+    \item \textbf{Objective:} Investigate how the total number of particles ($N_{total} = N_F + N_L$) affects collective behavior, convergence, and computational performance.
+    \item \textbf{Setup:} Vary $N_{total}$ while keeping the leader-to-follower ratio (e.g., $N_L/N_F \approx 1/25$) and leader coverage percentage (e.g., total capacity covers $\sim$30\% of $N_F$) relatively constant. Specific parameter variations are in Table~\ref{tab:exp1_params}.
+\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Parameters for Experiment 1: System Scale (Leader-to-Follower ratio $N_L/N_F \approx 1/25$)}
+    \label{tab:exp1_params}
+    \begin{tabular}{llll}
+        \toprule
+        Run ID & Approx. Total Particles ($N_{total}$) & Followers ($N_F$) & Leaders ($N_L$) \\
+        \midrule
+        Scale-S & $\sim$100  & 80  & 4   \\ % Actual N_L/N_F = 1/20
+        Scale-M & $\sim$830 & 800 & 32  \\ % Actual N_L/N_F = 1/25
+        Scale-L & $\sim$10000& 9600& 384 \\ % Actual N_L/N_F = 1/25 
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: Leader capacity will be scaled to maintain approx. 30\% coverage of $N_F$. Other parameters ($L_{\text{domain}}, v_0, R_{\text{interaction}}, \eta, \Delta t, T_{\text{communication}}$) kept constant. Maximum simulation steps will also be adjusted based on scale (e.g., 500 for S, 1000 for M, 1500-2000 for L).}}
+\end{table}
+
+\subsection{Experiment 2: Impact of Leader Coverage Ratio}
+\begin{itemize}
+    \item \textbf{Objective:} Study how the proportion of followers directly influenced by leaders (varied via \texttt{leader\_capacity}) alters system dynamics.
+    \item \textbf{Setup:} Fix $N_F$ and $N_L$ (e.g., $N_F=500, N_L=20$). Vary \texttt{leader\_capacity}. See Table~\ref{tab:exp2_params}.
+\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Parameters for Experiment 2: Leader Coverage Ratio}
+    \label{tab:exp2_params}
+    \begin{tabular}{lllll}
+        \toprule
+        Run ID & $N_F$ & $N_L$ & Target Coverage & \texttt{leader\_capacity} \\
+        \midrule
+        Coverage-Low    & 500 & 20 & 10\% & 3 \\
+        Coverage-Medium & 500 & 20 & 30\% & 8 \\
+        Coverage-High   & 500 & 20 & 50\% & 13  \\
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: Other parameters kept constant.}}
+\end{table}
+
+\subsection{Experiment 3: Single vs. Multiple Leaders (Fixed Total Coverage)}
+\begin{itemize}
+    \item \textbf{Objective:} Compare the impact of a single high-capacity leader versus multiple low-capacity leaders, given the same total follower coverage by leaders.
+    \item \textbf{Setup:} Fix $N_F$ (e.g., 500) and total leader influence (e.g., to cover 30\% of $N_F$, i.e., 150 followers total). See Table~\ref{tab:exp3_params}.
+\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Parameters for Experiment 3: Single vs. Multiple Leaders}
+    \label{tab:exp3_params}
+    \begin{tabular}{lllll}
+        \toprule
+        Run ID & $N_F$ & $N_L$ & \texttt{leader\_capacity} & Total Capacity \\
+        \midrule
+        Single-Leader & 500 & 1  & 150 & 150 \\
+        Multi-Leader-A& 500 & 10 & 15  & 150 \\
+        Multi-Leader-B& 500 & 30 & 5   & 150 \\
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: Other parameters kept constant.}}
+\end{table}
+
+\subsection{Experiment 4: Impact of Initial Leader Distribution}
+\begin{itemize}
+    \item \textbf{Objective:} Examine if the initial spatial placement of leaders affects the early system evolution and final emergent structures.
+    \item \textbf{Setup:} Fix all other parameters (e.g., $N_F=500, N_L=20$, 30\% coverage). Vary initial leader positions. See Table~\ref{tab:exp4_params}.
+\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Parameters for Experiment 4: Initial Leader Distribution}
+    \label{tab:exp4_params}
+    \begin{tabular}{ll}
+        \toprule
+        Run ID & Initial Leader Configuration \\
+        \midrule
+        Dist-Random   & Randomly distributed (current method) \\
+        Dist-Center   & Clustered at the domain center \\
+        Dist-Grid     & Uniformly on a grid \\
+        Dist-Periphery& Distributed along domain peripheries \\
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: Other parameters kept constant.}}
+\end{table}
+
+\subsection{Experiment 5: Impact of Leader Communication Frequency ($T_{\text{communication}}$)}
+\begin{itemize}
+    \item \textbf{Objective:} Determine how the frequency of global direction synchronization among leaders affects system convergence and dynamics.
+    \item \textbf{Setup:} Fix $N_F, N_L$, \texttt{leader\_capacity}, and Vicsek parameters. Vary $T_{\text{communication}}$. See Table~\ref{tab:exp5_params}.
+\end{itemize}
+\begin{table}[H]
+    \centering
+    \caption{Parameters for Experiment 5: Leader Communication Frequency}
+    \label{tab:exp5_params}
+    \begin{tabular}{ll}
+        \toprule
+        Run ID & $T_{\text{communication}}$ (steps) \\
+        \midrule
+        Freq-VeryHigh & 5 \\
+        Freq-High     & 15 \\
+        Freq-Medium   & 30 (current default) \\
+        Freq-Low      & 100 \\
+        Freq-VeryLow  & 200 \\
+        Freq-None     & $\infty$ (leaders only Vicsek post-init) \\
+        \bottomrule
+    \end{tabular}
+    \parbox{\textwidth}{\footnotesize \textit{Note: Other parameters kept constant.}}
+\end{table}
+
+\subsection{Convergence Metrics and Comparative Analysis}
+The primary metric for comparing the performance of the pure Vicsek model (baseline) and the various configurations of the LF model will be the \textbf{global follower polarization ($\Phi$)}. Our main analysis will focus on the time (number of simulation steps) required for each model configuration to achieve a high level of polarization (e.g., $\Phi \ge 0.95$). 
+
+This comparative approach will allow us to quantify how different aspects of the LF model (such as leader-follower ratio, leader capacity, communication frequency, and leader behavior rules) influence the speed at which the system self-organizes into a collectively ordered state, using the pure Vicsek model as a fundamental benchmark for spontaneous ordering.
+
+While other metrics such as Assignment Stability (AS), Leader Load Standard Deviation (LB\_std), and Leader Spacing Variance (LS\_var) will be logged to CSV files and their corresponding plots may be generated for a fuller understanding of the LF system's internal structure, the core comparative analysis regarding convergence *speed* will be centered on the follower polarization.
+
+\section{Implementation and Expected Outcomes}
+Simulations will be implemented in Python using NumPy for numerical operations and Matplotlib for visualization. 
+A key part of the analysis will be the quantitative comparison of convergence times to high polarization: contrasting the baseline Vicsek model with various LF model setups. We expect to observe distinct collective behaviors based on the parameter regimes explored. For instance, low leader coverage might result in a mix of small, leader-guided flocks and larger, self-organized Vicsek-like swarms of free followers. The interplay between local Vicsek alignment among leaders and their periodic global synchronization is anticipated to produce complex, potentially adaptive, leadership patterns. We will investigate how different LF configurations (e.g., leader coverage, number of leaders, communication frequency, initial distribution) influence this time to achieve collective order and the characteristics of the resulting polarized state (described by AS, LB\_std, LS\_var).
+
+Visualizations will primarily include comparative plots of the polarization curves (Vicsek vs. different LF setups) on the same axes to directly assess convergence speed. Snapshot grids and plots of other metrics (AS, LB\_std, LS\_var for the LF model) will serve as supplementary material to characterize the nature of the achieved states. A final report will detail the model, methods, all experimental results, and a discussion of their implications, along with potential avenues for future research (e.g., dynamic leader capacities, obstacle avoidance, or heterogeneous particle speeds).
+
+\end{document} 

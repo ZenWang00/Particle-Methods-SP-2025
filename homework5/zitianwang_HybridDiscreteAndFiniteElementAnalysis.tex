@@ -1,0 +1,56 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{siunitx}
+\title{Implementation Plan for "Hybrid Discrete and Finite Element Analysis Enables Fast Evaluation of Hip Joint Cartilage Mechanical Response"}
+\author{Zitian Wang}
+\date{\today}
+\begin{document}
+\maketitle
+
+\section*{1. Background and Methods}
+Original article: Venäläinen et al. (2025), J. Biomech. 182:112568, \href{https://doi.org/10.1016/j.jbiomech.2025.112568}{doi:10.1016/j.jbiomech.2025.112568}.
+The paper proposes a hybrid simulation framework combining a discrete particle representation of cartilage with a finite element (FE) model of the subchondral bone and surrounding tissues.  This approach retains the high fidelity of FE methods for bulk tissue while using discrete particles (e.g. smoothed particle hydrodynamics, SPH) to capture large deformation, contact mechanics, and fluid flow in the cartilage layer.  The hybrid method significantly reduces computation time compared with a full 3D FE cartilage model while preserving stress distribution accuracy.
+
+Key components:
+\begin{itemize}
+  \item Discrete particle layer: cartilage is discretized into particles with kernel-based interactions modeling elasticity and poroelasticity.
+  \item FE domain: bone and non-cartilage tissues are meshed and solved with standard FE solvers.
+  \item Coupling: forces and displacements are exchanged at the cartilage–bone interface using mortar-type constraints.
+\end{itemize}
+
+\section*{2. Implementation Plan}
+\subsection*{2.1 Reproducible Results}
+We will reproduce the cartilage contact pressure map under a static load of 2\,MPa applied at the femoral head.  Specifically, we aim to match the published peak contact pressure (\SI{4.5}{MPa}) and pressure distribution over the medial condyle within 10\% error.
+
+\subsection*{2.2 Data \& Parameter Settings}
+\begin{itemize}
+  \item Geometry: simplified axisymmetric femur tibia model with cartilage thickness \SI{2}{mm}.
+  \item Material properties:
+    \begin{itemize}
+      \item Cartilage particles: elastic modulus $E=10\,\mathrm{MPa}$, Poisson's ratio $\nu=0.4$, density $\rho=1100\,\mathrm{kg/m^3}$.
+      \item Bone FE: linear elastic $E=17\,\mathrm{GPa}$, $\nu=0.3$.
+    \end{itemize}
+  \item Discrete method parameters:
+    \begin{itemize}
+      \item Particle spacing $h=0.2\,\mathrm{mm}$.
+      \item Kernel function: cubic spline with support radius $2h$.
+      \item Time integration: explicit Verlet with $\Delta t=1e$-5 s.
+    \end{itemize}
+  \item FE mesh: tetrahedral mesh size \SI{1}{mm} in the bone region.
+  \item Boundary conditions: rigid fixation of tibia base, uniform displacement on femoral head.
+\end{itemize}
+
+\subsection*{2.3 Model Extensions and New Problems}
+\begin{itemize}
+  \item \textbf{Poroelastic coupling:} incorporate biphasic SPH to capture interstitial fluid flow and its effect on load support.
+  \item \textbf{Geometry variation:} apply patient-specific MRI-derived cartilage geometry.
+  \item \textbf{Damage and wear:} integrate a particle-based abrasion model to simulate cartilage degradation under repeated loading.
+  \item \textbf{Parameter study:} vary cartilage stiffness and thickness to predict osteoarthritis risk scenarios.
+\end{itemize}
+
+\vfill
+\noindent\textit{This implementation plan translates the hybrid discrete–FE strategy into a feasible workflow, balancing accuracy and computational cost.}
+\end{document} 

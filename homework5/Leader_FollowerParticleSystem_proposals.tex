@@ -1,0 +1,99 @@
+\documentclass[11pt]{article}
+\usepackage{geometry}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{amssymb}
+
+\begin{document}
+
+\begin{center}
+  {\LARGE \textbf{Project Proposal: Leader–Follower Particle System with Capacity Constraints}}\\[1em]
+  {\large Zitian Wang}
+\end{center}
+
+\section*{1. Objectives}
+\begin{enumerate}
+  \item Implement from scratch the classic Vicsek alignment model as a baseline.
+  \item Extend it by introducing:
+    \begin{itemize}
+      \item Randomly entering leader particles in a 2D domain.
+      \item A capacity limit $n = N_{\text{student}} / N_{\text{leader}}$ on how many followers each leader can influence.
+      \item Nearest-leader assignment when multiple leaders compete for the same student.
+      \item Periodic inter-leader communication to adjust headings for a more uniform spatial spread.
+    \end{itemize}
+  \item Define and measure convergence through:
+    \begin{itemize}
+      \item Polarization of followers $\Phi$.
+      \item Stable leader–follower assignments.
+      \item Balanced follower loads.
+      \item Low variance in inter-leader distances.
+    \end{itemize}
+  \item Compare the extended model against the pure Vicsek model in terms of convergence speed, final formations, and robustness.
+\end{enumerate}
+
+\section*{2. Methodology}
+\subsection*{2.1 Baseline Vicsek Model}
+\begin{itemize}
+  \item Particles $i=1,\dots,N$ each have position $\mathbf{x}_i(t)\in\mathbb{R}^2$ and heading $\theta_i(t)$.
+  \item Heading update:
+    \[
+      \theta_i(t+1)
+      = \mathrm{Arg}\!\Bigl\{\sum_{j\in\mathcal{N}_i} e^{i\theta_j(t)}\Bigr\} + \Delta_i(t),
+      \quad \Delta_i\sim\mathrm{Unif}\bigl[-\tfrac{\eta}{2},\tfrac{\eta}{2}\bigr].
+    \]
+  \item Position update:
+    \[
+      \mathbf{x}_i(t+1)
+      = \mathbf{x}_i(t) + v_0\bigl(\cos\theta_i(t+1),\,\sin\theta_i(t+1)\bigr).
+    \]
+\end{itemize}
+
+\subsection*{2.2 Leader–Follower Extension}
+\begin{itemize}
+  \item \textbf{Leader spawning:} $L$ leaders appear at random times/locations.
+  \item \textbf{Capacity constraint:} Each leader may attract at most $n$ students.
+  \item \textbf{Assignment rule:} Students choose the closest leader with available capacity.
+  \item \textbf{Follower update:} At each step, a follower aligns with the average heading of its assigned leader and Vicsek neighbors.
+\end{itemize}
+
+\subsection*{2.3 Inter-Leader Communication}
+\begin{itemize}
+  \item Every $T$ time steps, leaders exchange positions.
+  \item Each leader adjusts its heading to reduce local leader density (e.g.\ repulsion from nearest leaders).
+  \item Between communications, leaders move according to their updated headings.
+\end{itemize}
+
+\section*{3. Convergence \& Evaluation Metrics}
+\begin{itemize}
+  \item \textbf{Polarization:} 
+    \[
+      \Phi(t) = \frac{1}{N}\Bigl\lvert\sum_{i=1}^N\mathbf{v}_i(t)\Bigr\rvert,\quad
+      \mathbf{v}_i = (\cos\theta_i,\sin\theta_i).
+    \]
+    Convergence when $\Phi\ge0.95$ over several steps.
+  \item \textbf{Assignment stability:} Fraction of students whose leader assignment remains unchanged over 10 steps.
+  \item \textbf{Load balance:} Standard deviation of follower counts across leaders below a small threshold.
+  \item \textbf{Leader spacing:} Variance of pairwise leader distances falls below a threshold.
+\end{itemize}
+
+\section*{4. Expected Outcomes}
+\begin{itemize}
+  \item A clean, original Python implementation of both the baseline and extended models.
+  \item Visualizations (animations and plots) showing:
+    \begin{itemize}
+      \item Pure Vicsek alignment.
+      \item Leader-driven clustering.
+      \item Effects of capacity constraints.
+      \item Inter-leader dispersal via communication.
+    \end{itemize}
+  \item A comprehensive report detailing methods, results, and potential future extensions (e.g.\ dynamic capacities, obstacle avoidance).
+\end{itemize}
+
+\bigskip
+\noindent Please let me know if this proposal aligns with your expectations or if you would suggest any modifications.
+
+\bigskip
+\noindent Best regards,\\
+Zitian Wang
+
+\end{document}

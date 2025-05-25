@@ -704,37 +704,59 @@ def run_leader_follower_simulation(N_f_run, N_l_run, L_domain_run, v0_run, R_int
                                  capacity_run, T_comm_run, max_steps_run, 
                                  pol_thresh_run, conv_window_run_lf, check_interval_run_lf, 
                                  as_thresh_run, lb_thresh_run, ls_thresh_run, 
-                                 output_dir, leader_dist_mode_run="random"):
+                                 output_dir, leader_dist_mode_run="random",
+                                 suppress_plots=False, return_full_data=False, output_dir_override=None):
+    
+    current_output_dir = output_dir_override if output_dir_override is not None else output_dir
+    os.makedirs(current_output_dir, exist_ok=True) # Ensure the actual output directory exists
+
     print(f"\n--- Starting Leader-Follower Simulation (Nf={N_f_run}, Nl={N_l_run}, Cap={capacity_run}, Steps={max_steps_run}, Mode={leader_dist_mode_run}) ---")
-    print(f"Outputting to: {output_dir}")
+    print(f"Outputting to: {current_output_dir}")
+    
     lf_positions, lf_headings, lf_types, lf_follower_indices, lf_leader_actual_indices, \
         lf_assignments, lf_leader_follower_counts = initialize_system(N_l_run, N_f_run, L_domain_run, leader_dist_mode_run)
+    
     lf_all_positions_history = [lf_positions.copy()]
     lf_metrics_history = [] 
     lf_snapshots_data = []
     lf_snapshot_steps = np.linspace(0, max_steps_run - 1, 9, dtype=int)
+    
     if 0 in lf_snapshot_steps: 
         lf_snapshots_data.append({
             "step": 0, "positions": lf_positions.copy(), "headings": lf_headings.copy(),
             "types": lf_types.copy(), "assignments": lf_assignments.copy(),
             "follower_indices": lf_follower_indices.copy(), "leader_actual_indices": lf_leader_actual_indices.copy()
         })
+    
     lf_prev_assignments = lf_assignments.copy()
     lf_recent_assignment_stabilities, lf_recent_polarizations, lf_recent_load_std_devs, lf_recent_leader_dist_vars_changes = [], [], [], []
     lf_prev_leader_dist_variance = None 
     lf_converged = False 
-    final_step_lf = max_steps_run
+    final_step_lf = 0 # Initialize final_step_lf
+    
+    # Initialize metrics for potential early return if no check interval is hit before max_steps
+    current_stability_ratio = 0.0
+    current_pol = 0.0
+    current_lb_std = 0.0
+    current_ls_var = 0.0
+
     print(f"[DEBUG LF] Starting loop for {max_steps_run} steps...")
 
     for step in range(max_steps_run):
+        final_step_lf = step + 1 # Update actual steps run, will be overwritten if loop breaks early
         if step < 5 or (step + 1) % 100 == 0 or step == max_steps_run - 1:
              print(f"[DEBUG LF] In loop: current step {step + 1}/{max_steps_run}")
-        current_assignments_for_stability_check = lf_assignments.copy() # Save before assign_followers changes it for this step
+        
+        current_assignments_for_stability_check = lf_assignments.copy() 
         lf_assignments, lf_leader_follower_counts = assign_followers(lf_follower_indices, lf_leader_actual_indices, lf_positions, lf_leader_follower_counts, capacity_run, lf_assignments, L_domain_run)
         update_follower_headings_differentiated(lf_follower_indices, lf_positions, lf_headings, lf_types, lf_assignments, lf_leader_actual_indices,R_interaction_run**2, eta_run, L_domain_run)
-        if step % T_comm_run == 0 and step > 0: update_leader_headings_communication(lf_leader_actual_indices, lf_headings, eta_run)
-        else: 
-            if N_l_run > 0: update_leaders_vicsek_step(lf_leader_actual_indices, lf_positions, lf_headings, lf_types, R_interaction_run**2, eta_run, L_domain_run)
+        
+        if N_l_run > 0: # Only apply leader updates if there are leaders
+            if step % T_comm_run == 0 and step > 0: 
+                update_leader_headings_communication(lf_leader_actual_indices, lf_headings, eta_run)
+            else: 
+                update_leaders_vicsek_step(lf_leader_actual_indices, lf_positions, lf_headings, lf_types, R_interaction_run**2, eta_run, L_domain_run)
+        
         update_all_positions(lf_positions, lf_headings, v0_run, dt_run, L_domain_run)
         lf_all_positions_history.append(lf_positions.copy())
 
@@ -743,50 +765,60 @@ def run_leader_follower_simulation(N_f_run, N_l_run, L_domain_run, v0_run, R_int
                  stable_count = np.sum(lf_assignments == current_assignments_for_stability_check) 
                  current_stability_ratio = stable_count / len(lf_assignments)
             else: current_stability_ratio = 0.0 if len(lf_assignments)>0 else 1.0
+            
             current_pol = calculate_polarization(lf_headings, lf_types, TYPE_FOLLOWER)
-            current_lb_std = np.std(lf_leader_follower_counts) if len(lf_leader_follower_counts) > 0 else 0.0
-            current_ls_var = calculate_leader_distance_variance(lf_leader_actual_indices, lf_positions, L_domain_run)
+            current_lb_std = np.std(lf_leader_follower_counts) if N_l_run > 0 and len(lf_leader_follower_counts) > 0 else 0.0
+            current_ls_var = calculate_leader_distance_variance(lf_leader_actual_indices, lf_positions, L_domain_run) if N_l_run > 0 else 0.0
+            
             lf_metrics_history.append([step + 1, current_stability_ratio, current_pol, current_lb_std, current_ls_var])
+            
             lf_recent_assignment_stabilities.append(current_stability_ratio)
             if len(lf_recent_assignment_stabilities) > conv_window_run_lf: lf_recent_assignment_stabilities.pop(0)
             lf_recent_polarizations.append(current_pol)
             if len(lf_recent_polarizations) > conv_window_run_lf: lf_recent_polarizations.pop(0)
             lf_recent_load_std_devs.append(current_lb_std)
             if len(lf_recent_load_std_devs) > conv_window_run_lf: lf_recent_load_std_devs.pop(0)
-            if lf_prev_leader_dist_variance is not None:
+            
+            if lf_prev_leader_dist_variance is not None and N_l_run > 0:
                 var_change = abs(current_ls_var - lf_prev_leader_dist_variance)
                 lf_recent_leader_dist_vars_changes.append(var_change)
                 if len(lf_recent_leader_dist_vars_changes) > conv_window_run_lf: lf_recent_leader_dist_vars_changes.pop(0)
-            else: 
-                lf_recent_leader_dist_vars_changes.append(0.0)
-            lf_prev_assignments = lf_assignments.copy() # Update for the next interval's comparison
-            lf_prev_leader_dist_variance = current_ls_var
+            elif N_l_run > 0: # First time, or if no leaders, append 0 or handle appropriately
+                 lf_recent_leader_dist_vars_changes.append(0.0) # Placeholder if first check or N_l_run is 0 then becomes 0 later
+            
+            lf_prev_assignments = lf_assignments.copy() 
+            if N_l_run > 0 : lf_prev_leader_dist_variance = current_ls_var
+            
             pol_stable_for_stop = (len(lf_recent_polarizations) == conv_window_run_lf and all(p >= pol_thresh_run for p in lf_recent_polarizations))
+            
             if pol_stable_for_stop:
                 print(f"[DEBUG LF] CONVERGENCE MET (Polarization) at step {step + 1}. Breaking loop.")
-                lf_converged = True; final_step_lf = step + 1
-                if (step+1) not in lf_snapshot_steps: 
+                lf_converged = True; final_step_lf = step + 1 
+                if (step+1) not in lf_snapshot_steps and not suppress_plots: 
                     lf_snapshots_data.append({"step": step + 1, "positions": lf_positions.copy(),"headings": lf_headings.copy(),"types": lf_types.copy(),"assignments": lf_assignments.copy(),"follower_indices": lf_follower_indices.copy(),"leader_actual_indices": lf_leader_actual_indices.copy()})
                     print(f"[DEBUG LF] Final state snapshot taken at step {step + 1} due to polarization convergence")
                 break 
             print(f"LF Step {step+1}/{max_steps_run}: POL History: {['{:.3f}'.format(x) for x in lf_recent_polarizations]} (Target: {pol_thresh_run}) | AS: {current_stability_ratio:.3f} | LB_std: {current_lb_std:.2f} | LS_var: {current_ls_var:.3f}")
         
-        if (step + 1) in lf_snapshot_steps and not lf_converged:
+        if (step + 1) in lf_snapshot_steps and not lf_converged and not suppress_plots:
             if not any(s['step'] == (step + 1) for s in lf_snapshots_data):
                 lf_snapshots_data.append({"step": step + 1, "positions": lf_positions.copy(),"headings": lf_headings.copy(),"types": lf_types.copy(),"assignments": lf_assignments.copy(),"follower_indices": lf_follower_indices.copy(),"leader_actual_indices": lf_leader_actual_indices.copy()})
         elif (step + 1) % 100 == 0 and not ((step + 1) % check_interval_run_lf == 0) and not lf_converged:
              print(f"LF Step: {step+1}/{max_steps_run}")
     
-    final_step_lf = step + 1 # Correctly capture the last step if loop finishes
-    if not lf_converged: print(f"[DEBUG LF] Max steps ({max_steps_run}) reached.")
+    if not lf_converged: 
+        final_step_lf = max_steps_run # Ensure final_step_lf is max_steps_run if loop completed fully
+        print(f"[DEBUG LF] Max steps ({max_steps_run}) reached.")
     print(f"[DEBUG LF] Exited loop. Effective steps run for LF: {final_step_lf}")
 
-    print(f"[DEBUG LF Core] Attempting to save outputs to directory: {output_dir}")
+    # --- Output Saving --- 
+    # (CSV will always be saved to current_output_dir unless a more specific suppress_csv parameter is added later)
+    print(f"[DEBUG LF Core] Attempting to save outputs to directory: {current_output_dir}")
     if lf_metrics_history:
         try:
             header_lf = "Step,AssignmentStability,FollowerPolarization,LeaderLoadStdDev,LeaderDistVariance"
             metrics_array_lf = np.array(lf_metrics_history)
-            csv_path = os.path.join(output_dir, "leader_follower_metrics.csv")
+            csv_path = os.path.join(current_output_dir, "leader_follower_metrics.csv") # Use current_output_dir
             print(f"[DEBUG LF Core] Saving metrics to: {csv_path}")
             np.savetxt(csv_path, metrics_array_lf, delimiter=",", header=header_lf, comments='', fmt='%.6f')
             print(f"Leader-Follower metrics successfully saved to {csv_path}")
@@ -794,28 +826,115 @@ def run_leader_follower_simulation(N_f_run, N_l_run, L_domain_run, v0_run, R_int
         except Exception as e: print(f"[ERROR LF Core] Error saving LF metrics to CSV at {csv_path}: {e}"); traceback.print_exc()
     else: print("[DEBUG LF Core] No metrics recorded for Leader-Follower simulation to save (lf_metrics_history is empty).")
 
-    if lf_snapshots_data: 
-        try:
-            fig, axes = plt.subplots(3, 3, figsize=(18, 18))
-            axes_flat = axes.flatten()
-            for i in range(min(9, len(lf_snapshots_data))):
-                snap_data = lf_snapshots_data[i]
-                plot_single_snapshot(axes_flat[i], snap_data["positions"], snap_data["headings"], snap_data["types"], snap_data["assignments"],snap_data["follower_indices"], snap_data["leader_actual_indices"],L_domain_run, f"Step {snap_data['step']}")
-            for i in range(len(lf_snapshots_data), 9): fig.delaxes(axes_flat[i])
-            handles, labels = axes_flat[0].get_legend_handles_labels()
-            if handles: fig.legend(handles, labels, loc='upper center', ncol=max(1, len(handles)), bbox_to_anchor=(0.5, 0.99))
-            plt.tight_layout(rect=[0, 0, 1, 0.95])
-            fig.suptitle(f"LF Snapshots (Nf={N_f_run}, Nl={N_l_run}, Cap={capacity_run})", fontsize=16)
-            grid_plot_path = os.path.join(output_dir, "lf_snapshots_grid.png")
-            print(f"[DEBUG LF Core] Saving snapshot grid to: {grid_plot_path}")
-            plt.savefig(grid_plot_path); plt.close(fig)
-            print(f"LF Snapshot grid saved to {grid_plot_path}")
-            if not os.path.exists(grid_plot_path): print(f"[ERROR LF Core] Snapshot grid file NOT FOUND after saving: {grid_plot_path}")
-        except Exception as e: print(f"[ERROR LF Core] Error saving LF snapshot grid to {grid_plot_path if 'grid_plot_path' in locals() else output_dir}: {e}"); traceback.print_exc()
-    else: print("[DEBUG LF Core] No LF snapshots taken, skipping grid plot.")
+    if not suppress_plots:
+        if lf_snapshots_data: 
+            try:
+                fig, axes = plt.subplots(3, 3, figsize=(18, 18))
+                axes_flat = axes.flatten()
+                for i in range(min(9, len(lf_snapshots_data))):
+                    snap_data = lf_snapshots_data[i]
+                    plot_single_snapshot(axes_flat[i], snap_data["positions"], snap_data["headings"], snap_data["types"], snap_data["assignments"],snap_data["follower_indices"], snap_data["leader_actual_indices"],L_domain_run, f"Step {snap_data['step']}")
+                for i in range(len(lf_snapshots_data), 9): fig.delaxes(axes_flat[i])
+                handles, labels = axes_flat[0].get_legend_handles_labels()
+                if handles: fig.legend(handles, labels, loc='upper center', ncol=max(1, len(handles)), bbox_to_anchor=(0.5, 0.99))
+                plt.tight_layout(rect=[0, 0, 1, 0.95])
+                fig.suptitle(f"LF Snapshots (Nf={N_f_run}, Nl={N_l_run}, Cap={capacity_run})", fontsize=16)
+                grid_plot_path = os.path.join(current_output_dir, "lf_snapshots_grid.png") # Use current_output_dir
+                print(f"[DEBUG LF Core] Saving snapshot grid to: {grid_plot_path}")
+                plt.savefig(grid_plot_path); plt.close(fig)
+                print(f"LF Snapshot grid saved to {grid_plot_path}")
+                if not os.path.exists(grid_plot_path): print(f"[ERROR LF Core] Snapshot grid file NOT FOUND after saving: {grid_plot_path}")
+            except Exception as e: print(f"[ERROR LF Core] Error saving LF snapshot grid to {grid_plot_path if 'grid_plot_path' in locals() else current_output_dir}: {e}"); traceback.print_exc()
+        else: print("[DEBUG LF Core] No LF snapshots taken, skipping grid plot.")
 
-    # ... (Trajectory plot logic remains the same)
-# ... (rest of the file)
+        # Trajectory Plot (2D)
+        if len(lf_all_positions_history) > 1: # Need at least 2 steps for a trajectory
+            try:
+                # Pass current_output_dir for saving the plot
+                plot_trajectories(lf_all_positions_history, lf_types, L_domain_run, current_output_dir, filename_base="lf_trajectories_2d.png")
+            except Exception as e: print(f"[ERROR LF Core] Error saving 2D trajectory plot: {e}"); traceback.print_exc()
+        else: print("[DEBUG LF Core] Not enough position history for 2D trajectory plot.")
+
+        # Trajectory Plot (3D with Time)
+        if len(lf_all_positions_history) > 1: # Need at least 2 steps for a trajectory
+            try:
+                plot_trajectories_3d_time(lf_all_positions_history, lf_types, L_domain_run, current_output_dir, filename_base="lf_trajectories_3d_time.png")
+            except Exception as e: print(f"[ERROR LF Core] Error saving 3D trajectory plot: {e}"); traceback.print_exc()
+        else: print("[DEBUG LF Core] Not enough position history for 3D trajectory plot.")
+    
+    # --- Return Data if Requested ---
+    if return_full_data:
+        final_metrics_dict = {
+            'follower_polarization': current_pol,
+            'assignment_stability': current_stability_ratio,
+            'leader_load_std_dev': current_lb_std,
+            'leader_dist_variance': current_ls_var
+        }
+        return (final_metrics_dict, lf_all_positions_history, lf_leader_actual_indices, lf_types, final_step_lf)
+    else:
+        return None # Or some other indicator of completion if not returning full data
+
+# Need to define plot_trajectories_2d_history if it's a new function or rename if it's existing plot_trajectories
+# Assuming plot_trajectories is the 2D one.
+# For consistency, let's assume plot_trajectories was intended to be the 2D one.
+
+# Renaming plot_trajectories to plot_trajectories_2d_history for clarity in the call above
+# if it was indeed the 2D plot. If it's a new function, it needs to be defined.
+# For now, I'll assume plot_trajectories should be called here. Let's check its definition.
+# The existing plot_trajectories function seems suitable for 2D history.
+# Let's adjust the call to match the existing function name if it's `plot_trajectories`
+
+# (Outside the function, ensure plot_trajectories and plot_trajectories_3d_time exist as expected)
+
+# The previous edit block will focus only on `run_leader_follower_simulation`
+# I will make a separate edit for any plotting function renames or new definitions if necessary
+# after confirming their current state.
+
+# For now, the call inside run_leader_follower_simulation will be to a hypothetical
+# plot_trajectories_2d_history. If plot_trajectories is the correct one, we'll adjust.
+# Let's assume plot_trajectories is indeed the 2D trajectory plot function
+# and it takes (positions_history, types, L, output_dir, filename_base) as arguments.
+
+# The definition of plot_trajectories is:
+# def plot_trajectories(positions_history, types, L, filename="lf_trajectories.png"):
+# It needs to be adapted to take output_dir and filename_base or the call needs to be adapted.
+
+# I will adapt the CALL inside run_leader_follower_simulation for now.
+# The plot_trajectories_2d_history call will be changed to use plot_trajectories
+# and construct the filename correctly.
+
+# The edit will now be structured to only modify run_leader_follower_simulation and add the new parameters
+# and conditional logic, and the return statement.
+# The plotting calls inside will be adjusted if their signatures in the file don't match output_dir/filename_base pattern.
+
+# Revised section for plotting within run_leader_follower_simulation:
+# This will be part of the larger edit block for the function.
+# Inside the `if not suppress_plots:` block:
+# ... (snapshot grid saving code) ...
+#        if len(lf_all_positions_history) > 1:
+#            try:
+#                traj_2d_filename = os.path.join(current_output_dir, "lf_trajectories_2d.png")
+#                plot_trajectories(lf_all_positions_history, lf_types, L_domain_run, filename=traj_2d_filename)
+#                print(f"2D Trajectory plot saved to {traj_2d_filename}")
+#            except Exception as e: print(f"[ERROR LF Core] Error saving 2D trajectory plot: {e}"); traceback.print_exc()
+#        else: print("[DEBUG LF Core] Not enough position history for 2D trajectory plot.")
+#
+#        if len(lf_all_positions_history) > 1:
+#            try:
+#                plot_trajectories_3d_time(lf_all_positions_history, lf_types, L_domain_run, current_output_dir, filename_base="lf_trajectories_3d_time.png")
+#            except Exception as e: print(f"[ERROR LF Core] Error saving 3D trajectory plot: {e}"); traceback.print_exc()
+#        else: print("[DEBUG LF Core] Not enough position history for 3D trajectory plot.")
+
+
+# The above commented out section is how I'll adjust the plotting calls within the main edit block.
+
+# The actual edit for the function starts here. I need to make sure to get the entire function body.
+# It seems I need to read the file first to ensure I get the whole function definition correctly.
+# The user has provided lines 550-703 for this function which should be a good reference.
+# I will proceed with the edit, assuming the function structure. 
+# I will also initialize final_step_lf at the beginning of the function correctly.
+# And ensure metric calculations (current_pol etc.) are robust if N_l_run is 0.
+
 
 # REMOVE THE OLD if __name__ == "__main__": block from zitianwang_LeaderFollowerParticleSystem.py
 # That logic will now go into separate experiment script(s). 

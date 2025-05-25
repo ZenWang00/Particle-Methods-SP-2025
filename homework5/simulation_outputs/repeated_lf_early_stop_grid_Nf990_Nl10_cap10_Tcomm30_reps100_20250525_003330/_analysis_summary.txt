@@ -1,0 +1,24 @@
+
+--- Aggregated Metrics Analysis ---
+Final metrics descriptive statistics saved to: /Users/zitian/Particle-Methods/homework5/simulation_outputs/repeated_lf_early_stop_grid_Nf990_Nl10_cap10_Tcomm30_reps100_20250525_003330/summary_metrics_statistics.csv
+
+Descriptive Statistics for Final Metrics:
+       follower_polarization  assignment_stability  leader_load_std_dev  leader_dist_variance
+count             100.000000            100.000000                100.0            100.000000
+mean                0.996937              0.991475                  0.0              7.289764
+std                 0.001130              0.005841                  0.0              1.481664
+min                 0.993092              0.967677                  0.0              3.680591
+25%                 0.996395              0.988889                  0.0              6.271147
+50%                 0.997287              0.992929                  0.0              7.082032
+75%                 0.997790              0.994949                  0.0              8.195357
+max                 0.998168              1.000000                  0.0             12.137712
+
+--- Actual Stopping Steps Analysis ---
+Average stopping step: 45.95
+Std Dev of stopping step: 11.97
+Min stopping step: 30
+Max stopping step: 85
+Stopping steps histogram saved to: /Users/zitian/Particle-Methods/homework5/simulation_outputs/repeated_lf_early_stop_grid_Nf990_Nl10_cap10_Tcomm30_reps100_20250525_003330/stopping_steps_histogram.png
+
+--- Leader Position Heatmap Generation ---
+Leader position heatmap saved to: /Users/zitian/Particle-Methods/homework5/simulation_outputs/repeated_lf_early_stop_grid_Nf990_Nl10_cap10_Tcomm30_reps100_20250525_003330/leader_position_heatmap_early_stop.png
